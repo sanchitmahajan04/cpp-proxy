@@ -1,0 +1,29 @@
+# Build and IDE
+build/
+*.o
+*.a
+*.so
+*.exe
+*.out
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Logs
+proxy.log
+*.log
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug symbols
+*.dSYM/
