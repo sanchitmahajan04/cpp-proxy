@@ -1,16 +1,15 @@
 # cpp-proxy
 
-A C++ HTTP proxy implementation showcasing two concurrency models: **epoll-based** (async multiplexing, scalable) and **thread-per-connection** (simple, blocking).
+A lightweight HTTP proxy written in C++. I built two versions: one using **epoll** (fast, handles tons of connections) and one using **threads** (simple, easy to understand). Both support request filtering and detailed logging.
 
 ## Features
 
-- **Request filtering**: block access to specified hosts
-- **Structured logging**: per-request logs (client IP, host, status, bytes, duration)
-- **Two implementations**:
-  - `EpollProxy`: Epoll‑based proxy that multiplexes client and server sockets on a single thread, offering much higher concurrency than the thread-per-connection variant
-  - `ThreadProxy`: Thread-per-connection model; simpler but higher resource overhead
-- **Error handling**: graceful socket cleanup, connection timeout handling
-- **HTTP Host header parsing**: extract target host and validate/filter
+- Block access to certain hosts (e.g., Facebook, YouTube)
+- Logs each request with timing and byte counts
+- **Two versions**:
+  - **Epoll**: Single-threaded, scales to thousands of connections
+  - **Thread-based**: One thread per connection, simple reference implementation
+- Extracts target host from HTTP requests and routes/filters accordingly
 
 ## Project Structure
 
@@ -29,14 +28,9 @@ CMakeLists.txt
 README.md
 ```
 
-## Build
+## Setup & Build
 
-### Prerequisites
-- C++17 compiler (g++)
-- CMake 3.5+
-- Linux (uses epoll, requires POSIX sockets)
-
-### Compile
+You'll need C++17, CMake, and Linux (uses epoll).
 
 ```bash
 mkdir -p build && cd build
@@ -44,102 +38,64 @@ cmake ..
 make
 ```
 
-Outputs:
-- `epoll_proxy_bin` - the main epoll-based proxy
-- `thread_proxy_bin` - the thread-based reference implementation
+This builds `epoll_proxy_bin` and `thread_proxy_bin`.
 
-## Run
+## Running the Proxy
 
-### Epoll Proxy (Recommended for production-like testing)
-
+Start the epoll version:
 ```bash
 ./epoll_proxy_bin
 ```
 
-Listens on `127.0.0.1:8080`. Logs to `proxy.log`.
+It listens on `127.0.0.1:8080` and logs to `proxy.log`.
 
-### Thread Proxy (Simple reference)
+## Testing
 
-```bash
-./thread_proxy_bin
-```
-
-Same interface; for comparison/testing.
-
-## Usage & Testing
-
-### Quick Test with curl
-
-Forward a request to `example.com` through the proxy:
-
+### Simple Request
+Forward a request through the proxy:
 ```bash
 curl -v -x http://127.0.0.1:8080 http://example.com/
 ```
 
-Expected output:
-- Proxy prints: `New client: 127.0.0.1` and `[debug] extracted host: 'example.com'`
-- curl receives HTML from example.com
-- `proxy.log` records: `2026-03-02 15:39:00 | 127.0.0.1 | example.com | OK | 12345 bytes | 150 ms`
+You'll see the proxy print the incoming request and log the result.
 
-### Test Multiple Concurrent Requests (epoll)
-
+### Blocked Hosts
+The proxy blocks `facebook.com`, `instagram.com`, `youtube.com`. Try:
 ```bash
-# Terminal 1: run proxy
-./epoll_proxy_bin
+curl -x http://127.0.0.1:8080 http://facebook.com/
+```
 
-# Terminal 2: send requests in parallel
+You get a 403 response and the log shows `BLOCKED`.
+
+### Multiple Concurrent Requests
+```bash
 for i in {1..5}; do
-    curl -s -x http://127.0.0.1:8080 http://example.com/ > /dev/null &
+    curl -s -x http://127.0.0.1:8080 http://example.com/ &
 done
 wait
 tail proxy.log
 ```
 
-### Test Blocked Host
+The epoll version handles these easily on a single thread.
 
-The proxy blocks: `facebook.com`, `instagram.com`, `youtube.com`
-
-```bash
-curl -v -x http://127.0.0.1:8080 http://facebook.com/
-```
-
-Expected: HTTP 403 Forbidden response, log entry with status `BLOCKED`.
-
-### Inspect Logs
-
+### View Logs
 ```bash
 tail -f proxy.log
 ```
 
-Format: `timestamp | client_ip | host | status | bytes_sent | duration_ms`
+Each line: `timestamp | client_ip | host | status | bytes | ms`
 
-## Design Notes
+## Epoll vs Threads
 
-### Epoll vs Thread
+| | Epoll | Thread |
+|---|---|---|
+| Scalability | Thousands of connections | Limited by thread count |
+| CPU | Efficient | Higher overhead |
+| Memory | Low | ~1-2 MB per thread |
+| Code | More complex | Simple |
+| Best for | Production | Learning/small loads |
 
-| Aspect | Epoll | Thread |
-|--------|-------|--------|
-| Scalability | High (thousands of connections) | Low (limited by threads) |
-| CPU Overhead | Low (no context switch per connection) | Higher (thread scheduling) |
-| Memory | Minimal | ~1-2 MB per thread |
-| Latency | Predictable | Affected by thread pool |
-| Code Complexity | Higher | Lower |
-| Use Case | Production proxies, load balancers | Simple demos, dev testing |
-
-**Recommendation**: Use `EpollProxy` for real workloads; use `ThreadProxy` as a reference or teaching tool.
-
-### Key Implementation Details
-
-**EpollProxy**:
-- Uses epoll for readiness notifications on client and server sockets, allowing a single thread to manage hundreds or thousands of connections
-- Proper socket-pair mapping with bidirectional logging
-- Detects and cleans up socket errors via `EPOLLERR`/`EPOLLHUP`
-
-**ThreadProxy**:
-- Blocking I/O for simplicity
-- One thread per client (spawned with `std::thread`, detached)
-- Synchronous DNS and connect calls
-- Minimal overhead for small request counts
+The epoll version is what we'd use in real deployments. The thread version is good for understanding how proxies work.
 
 ## Future Improvements
 
